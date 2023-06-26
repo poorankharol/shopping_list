@@ -1,7 +1,11 @@
+import 'dart:convert';
+
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:shopping_list/data/categories.dart';
 import 'package:shopping_list/models/category.dart';
 import 'package:shopping_list/models/grocery_item.dart';
+import 'package:http/http.dart' as http;
 
 class NewItemScreen extends StatefulWidget {
   const NewItemScreen({super.key});
@@ -11,19 +15,51 @@ class NewItemScreen extends StatefulWidget {
 }
 
 class _NewItemScreenState extends State<NewItemScreen> {
+  final dio = Dio();
   final _formKey = GlobalKey<FormState>();
   var _enteredName;
   var _enteredQuanity;
   var _selectedCategory = categories[Categories.vegetables];
+  var _isSending = false;
 
-  void _saveItem() {
+  void _saveItem() async {
     if (_formKey.currentState!.validate()) {
       _formKey.currentState!.save();
-      Navigator.of(context).pop(GroceryItem(
-          id: DateTime.now().toString(),
-          name: _enteredName,
-          quantity: _enteredQuanity,
-          category: _selectedCategory!));
+      setState(() {
+        _isSending = true;
+      });
+      //dio.options.headers['content-Type'] = 'application/json';
+      //const url = 'https://flutter-prep-6a73a-default-rtdb.firebaseio.com/shopping-list.json';
+      final url = Uri.https('flutter-prep-6a73a-default-rtdb.firebaseio.com',
+          'shopping-list.json');
+
+      final response = await http.post(
+        url,
+        headers: {'content-Type': 'application/json'},
+        body: json.encode(
+          {
+            'name': _enteredName,
+            'quantity': _enteredQuanity,
+            'category': _selectedCategory!.name
+          },
+        ),
+      );
+
+      //print(json.decode(response.data));
+      print(response.statusCode.toString());
+
+      final Map<String, dynamic> resData = json.decode(response.body);
+
+      if (!context.mounted) {
+        return;
+      }
+      Navigator.of(context).pop(
+        GroceryItem(
+            id: resData['name'],
+            name: _enteredName,
+            quantity: _enteredQuanity,
+            category: _selectedCategory!),
+      );
     }
   }
 
@@ -124,16 +160,26 @@ class _NewItemScreenState extends State<NewItemScreen> {
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
                   TextButton(
-                    onPressed: () {
-                      _formKey.currentState!.reset();
-                    },
+                    onPressed: _isSending
+                        ? null
+                        : () {
+                            _formKey.currentState!.reset();
+                          },
                     child: const Text('Reset'),
                   ),
                   ElevatedButton(
-                    onPressed: () {
-                      _saveItem();
-                    },
-                    child: const Text('Add Item'),
+                    onPressed: _isSending
+                        ? null
+                        : () {
+                            _saveItem();
+                          },
+                    child: _isSending
+                        ? const SizedBox(
+                            height: 16,
+                            width: 16,
+                            child: CircularProgressIndicator(),
+                          )
+                        : const Text('Add Item'),
                   )
                 ],
               )
